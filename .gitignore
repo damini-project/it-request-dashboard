@@ -1,0 +1,27 @@
+# =========================
+# 1. Frontend (React/Vite)
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/.eslintcache
+*.log
+
+# =========================
+# 2. Backend (Python/FastAPI)
+# =========================
+backend/__pycache__/
+backend/venv/
+backend/.venv/
+backend/env/
+*.pyc
+
+# =========================
+# 3. Database & Secret Files
+# =========================
+# 로컬에서 테스트한 DB 파일은 깃허브에 올리지 않는 것이 정석입니다!
+data/*.db
+it_requests.db
+*.sqlite3
+
+# 환경변수 (비밀번호, API 키 등)
+.env
