@@ -114,12 +114,20 @@ def get_duplicate_patterns():
             ORDER BY 건수 DESC LIMIT 5
         """, conn)
 
-def get_similar_catchup(reason):
+def get_similar_requests(reason):
+    """현재 요청 내용(reason)과 유사한 과거 내역 조회"""
     with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute(f"SELECT CATCH_UP FROM {TABLE_NAME} WHERE REASON LIKE ? AND CATCH_UP != '' ORDER BY ROWID DESC LIMIT 1", (f'%{reason}%',))
-        res = cursor.fetchone()
-        return res[0] if res else ""
+        # REASON에 키워드가 포함되고 CATCH_UP이 있는 데이터를 우선순위로 5건 조회
+        query = f"""
+            SELECT NO, WORK_YN, REASON, CATCH_UP 
+            FROM {TABLE_NAME} 
+            WHERE REASON LIKE ? AND CATCH_UP != '' 
+            ORDER BY NO DESC LIMIT 5
+        """
+        cursor.execute(query, (f'%{reason}%',))
+        return [dict(row) for row in cursor.fetchall()]
 
 def update_request(no, catch_up):
     with sqlite3.connect(DB_PATH) as conn:
