@@ -39,7 +39,7 @@ def init_db():
                 CNF_YN TEXT,
                 PART TEXT,
                 RESPONSE TEXT,
-                LESS_RESPONSE TEXT,
+                LESSRESPONSE TEXT,
                 CATCH_UP TEXT,
                 RMK TEXT,
                 SLIP_DE TEXT,
@@ -55,14 +55,14 @@ def insert_excel_data(df):
         '구분코드': 'WGUBUN_CD', '구분명': 'WGUBUN_CDNM',
         '요청자사번':'REQUESTER', '요청자': 'REQUESTER2', '요청일자': 'REQUEST_DE',
         '확인여부': 'CNF_YN', '파트': 'PART',
-        '검토내용': 'RESPONSE', '미진사유': 'LESS_RESPONSE',
+        '검토내용': 'RESPONSE', '미진사유': 'LESSRESPONSE',
         'CATCH_UP':'CATCH_UP','비고':'RMK','전표일자':'SLIP_DE', '전표번호':'SLIP_NO','상계전표':'UNPY_SLIP'
     }
 
 
     df = df.rename(columns=mapping)
 
-    columns = ['NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM', 'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM', 'RESPONSE', 'LESS_RESPONSE']
+    columns = ['NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM', 'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM', 'RESPONSE', 'LESSRESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP']
     df = df[[c for c in columns if c in df.columns]]
 
     with sqlite3.connect(DB_PATH) as conn:

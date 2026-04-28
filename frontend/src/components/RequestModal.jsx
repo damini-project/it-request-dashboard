@@ -11,7 +11,7 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center p-6 border-b border-[#2D2F39]">
           <h2 className="text-xl font-bold text-white flex items-center gap-3">
-            상세 요청 내역
+            상세 요청
             {getStatusBadge(request.WORK_YN)}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition">
@@ -75,11 +75,11 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
           )}
 
           {/* 4. 미진 사유 (빨간색 테마) */}
-          {request.LESS_RESPONSE && (
+          {request.LESSRESPONSE && (
             <div>
               <div className="text-xs text-red-400 mb-2 font-bold">미진 사유</div>
               <div className="bg-red-900/20 p-4 rounded-xl border border-red-500/30 text-red-100 text-sm whitespace-pre-wrap leading-relaxed">
-                {request.LESS_RESPONSE}
+                {request.LESSRESPONSE}
               </div>
             </div>
           )}
