@@ -1,141 +1,164 @@
 import sqlite3
-import os
 import pandas as pd
+import os
 
-DB_DIR = "data"
-DATABASE_NAME = "it_requests.db"
-DB_PATH = os.path.join(DB_DIR, DATABASE_NAME)
-TABLE_NAME = "it_requests"
+# DB 파일 경로 설정
+DB_DIR = os.path.join(os.path.dirname(__file__), 'data')
+if not os.path.exists(DB_DIR):
+    os.makedirs(DB_DIR)
 
-def clean_value(val):
-    """문자열 변환 및 .0 제거 (20240101.0 -> 20240101)"""
-    if pd.isna(val) or val == "":
-        return ""
-    # 숫자인 경우 소수점 제거 후 문자열화
-    if isinstance(val, (float, int)):
-        s = str(int(float(val)))
-    else:
-        s = str(val).strip()
-        if s.endswith(".0"):
-            s = s[:-2]
-    return s if s.lower() != "nan" else ""
+DB_PATH = os.path.join(DB_DIR, 'it_requests.db')
+TABLE_NAME = 'it_requests'
 
 def init_db():
-    os.makedirs(DB_DIR, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(f"""
+        cursor = conn.cursor()
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                NO TEXT PRIMARY KEY, 
+                NO TEXT PRIMARY KEY,
                 WORK_YN TEXT,
-                REASON TEXT, 
+                REASON TEXT,
+                CATCH_UP TEXT,
                 WGUBUN_CD TEXT,
                 WGUBUN_CDNM TEXT,
-                WGUBUN_NM TEXT,
                 REQUESTER TEXT,
-                REQUESTER2 TEXT,
-                DEVELOPER TEXT,
-                DEVELOPER2 TEXT,
                 REQUEST_DE TEXT,
                 CNF_YN TEXT,
                 PART TEXT,
+                REQUESTER2 TEXT,
+                WGUBUN_NM TEXT,
                 RESPONSE TEXT,
-                LESSRESPONSE TEXT,
-                CATCH_UP TEXT,
+                LESS_RESPONSE TEXT,
                 RMK TEXT,
                 SLIP_DE TEXT,
                 SLIP_NO TEXT,
-                UNPY_SLIP TEXT
+                UNPY_SLIP TEXT,
+                BRAND_CD TEXT,      -- 추가
+                DEVELOPER TEXT,     -- 추가
+                DEVELOPER2 TEXT,    -- 추가
+                RESPONSE_YN TEXT    -- 추가
             )
-        """)
+        ''')
+        conn.commit()
 
 def insert_excel_data(df):
-    """Excel 데이터를 읽어 DB에 저장 (컬럼 매핑 포함)"""
-    mapping = {
-        '번호': 'NO', '작업상태':'WORK_YN','요청제목': 'WGUBUN_NM', '요청내용': 'REASON',
-        '구분코드': 'WGUBUN_CD', '구분명': 'WGUBUN_CDNM',
-        '요청자사번':'REQUESTER', '요청자': 'REQUESTER2', '요청일자': 'REQUEST_DE',
-        '확인여부': 'CNF_YN', '파트': 'PART',
-        '검토내용': 'RESPONSE', '미진사유': 'LESSRESPONSE',
-        'CATCH_UP':'CATCH_UP','비고':'RMK','전표일자':'SLIP_DE', '전표번호':'SLIP_NO','상계전표':'UNPY_SLIP'
-    }
+    """Excel 데이터를 읽어 DB에 저장 (모든 컬럼 매핑 및 중복 방지)"""
 
+    # 1. 컬럼명 정제
+    df.columns = [str(c).strip().upper() for c in df.columns]
+
+    # 2. 한글/영어 통합 매핑 (누락된 4개 컬럼 추가)
+    mapping = {
+        '번호': 'NO', '작업상태': 'WORK_YN', '요청제목': 'WGUBUN_NM', '요청내용': 'REASON',
+        '구분코드': 'WGUBUN_CD', '구분명': 'WGUBUN_CDNM', '요청자사번': 'REQUESTER',
+        '요청자': 'REQUESTER2', '요청일자': 'REQUEST_DE', '확인여부': 'CNF_YN', '파트': 'PART',
+        '검토내용': 'RESPONSE', '미진사유': 'LESS_RESPONSE', 'CATCH_UP': 'CATCH_UP',
+        '비고': 'RMK', '전표일자': 'SLIP_DE', '전표번호': 'SLIP_NO', '상계전표': 'UNPY_SLIP',
+        '브랜드코드': 'BRAND_CD', '개발자': 'DEVELOPER', '개발자2': 'DEVELOPER2', '검토여부': 'RESPONSE_YN',
+
+        # 영어 원본 컬럼 대응
+        'NO': 'NO', 'WORK_YN': 'WORK_YN', 'WGUBUN_NM': 'WGUBUN_NM', 'REASON': 'REASON',
+        'REQUEST_DE': 'REQUEST_DE', 'PART': 'PART', 'REQUESTER2': 'REQUESTER2',
+        'RESPONSE': 'RESPONSE', 'LESSRESPONSE': 'LESS_RESPONSE', 'CATCH_UP': 'CATCH_UP',
+        'RMK': 'RMK', 'BRAND_CD': 'BRAND_CD', 'DEVELOPER': 'DEVELOPER',
+        'DEVELOPER2': 'DEVELOPER2', 'RESPONSE_YN': 'RESPONSE_YN'
+    }
 
     df = df.rename(columns=mapping)
 
-    columns = ['NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM', 'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM', 'RESPONSE', 'LESSRESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP']
-    df = df[[c for c in columns if c in df.columns]]
+    # 3. 빈 행(NO가 없는 행) 제거 및 타입 정리
+    if 'NO' in df.columns:
+        df = df.dropna(subset=['NO'])
+        df = df[df['NO'].astype(str).str.strip() != '']
 
-    with sqlite3.connect(DB_PATH) as conn:
-        df.to_sql(TABLE_NAME, conn, if_exists='append', index=False)
+    # 4. DB 스키마에 정의된 모든 컬럼 추출
+    db_columns = [
+        'NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM',
+        'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM',
+        'RESPONSE', 'LESS_RESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP',
+        'BRAND_CD', 'DEVELOPER', 'DEVELOPER2', 'RESPONSE_YN'
+    ]
 
+    final_cols = [c for c in db_columns if c in df.columns]
+    final_df = df[final_cols].copy().fillna('').astype(str)
 
-def get_monthly_trends(start_str, end_str):
-    with sqlite3.connect(DB_PATH) as conn:
-        s, e = start_str.replace("-", ""), end_str.replace("-", "")
-        # REQUEST_DE format YYYYMMDD, extract YYYYMM
-        query = f"""
-            SELECT substr(REQUEST_DE, 5, 2) as month, CNF_YN, COUNT(*) as count 
-            FROM {TABLE_NAME} 
-            WHERE REQUEST_DE BETWEEN ? AND ? 
-            GROUP BY month, CNF_YN
-        """
-        return pd.read_sql_query(query, conn, params=(s, e))
+    # 4. 데이터 청소 및 날짜 형식 보정
+    final_df = df[final_cols].copy().fillna('').astype(str)
 
-def get_dept_stats(start_str, end_str):
-    with sqlite3.connect(DB_PATH) as conn:
-        s, e = start_str.replace("-", ""), end_str.replace("-", "")
-        query = f"SELECT PART, COUNT(*) as count FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ? GROUP BY PART"
-        return pd.read_sql_query(query, conn, params=(s, e))
+    if 'REQUEST_DE' in final_df.columns:
+        def fix_date(date_str):
+            date_str = date_str.strip().split(' ')[0] # 시간 정보 있으면 제거
+            if len(date_str) == 8 and date_str.isdigit(): # 20260428 형태인 경우
+                return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            return date_str
 
-def get_category_stats(start_str, end_str):
-    with sqlite3.connect(DB_PATH) as conn:
-        s, e = start_str.replace("-", ""), end_str.replace("-", "")
-        query = f"SELECT WGUBUN_CDNM, COUNT(*) as count FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ? GROUP BY WGUBUN_CDNM"
-        return pd.read_sql_query(query, conn, params=(s, e))
+        final_df['REQUEST_DE'] = final_df['REQUEST_DE'].apply(fix_date)
 
-def get_stats(start_str, end_str):
-    """start_str, end_str는 '20240401' 형태의 문자열이어야 함"""
-    with sqlite3.connect(DB_PATH) as conn:
-        s, e = start_str.replace("-", ""), end_str.replace("-", "")
-        query = f"SELECT * FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ?"
-        df = pd.read_sql_query(query, conn, params=(s, e))
-        total = len(df)
-        completed = len(df[df['CNF_YN'] == 'Y'])
-        pending = len(df[df['CNF_YN'] == 'N'])
-        return total, completed, pending
+    # 5. DB 저장 (INSERT OR REPLACE 적용으로 중복 에러 차단)
+    if not final_df.empty:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cols_str = ", ".join(final_df.columns)
+                placeholders = ", ".join(["?"] * len(final_df.columns))
+                sql = f"INSERT OR REPLACE INTO {TABLE_NAME} ({cols_str}) VALUES ({placeholders})"
 
-def get_duplicate_patterns():
-    with sqlite3.connect(DB_PATH) as conn:
-        # 상위 5개 패턴 가져오기
-        return pd.read_sql_query(f"""
-            SELECT REASON as '요청내용', COUNT(*) as '건수' 
-            FROM {TABLE_NAME} 
-            GROUP BY REASON 
-            ORDER BY 건수 DESC LIMIT 5
-        """, conn)
-
-def get_similar_requests(reason):
-    """현재 요청 내용(reason)과 유사한 과거 내역 조회"""
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        # REASON에 키워드가 포함되고 CATCH_UP이 있는 데이터를 우선순위로 5건 조회
-        query = f"""
-            SELECT NO, WORK_YN, REASON, CATCH_UP 
-            FROM {TABLE_NAME} 
-            WHERE REASON LIKE ? AND CATCH_UP != '' 
-            ORDER BY NO DESC LIMIT 5
-        """
-        cursor.execute(query, (f'%{reason}%',))
-        return [dict(row) for row in cursor.fetchall()]
-
-def update_request(no, catch_up):
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(f"UPDATE {TABLE_NAME} SET CATCH_UP = ?, CNF_YN = 'Y' WHERE NO = ?", (catch_up, no))
+                cursor.executemany(sql, [tuple(x) for x in final_df.values])
+                conn.commit()
+                print(f"✅ [SUCCESS] {len(final_df)}건의 데이터가 처리되었습니다.")
+        except Exception as e:
+            print(f"❌ [DB ERROR] 저장 실패: {e}")
+            raise e
 
 def get_all_requests():
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM {TABLE_NAME} ORDER BY NO DESC")
+        cursor.execute(f"SELECT * FROM {TABLE_NAME} ORDER BY REQUEST_DE DESC, NO DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+def update_request(no, catch_up):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"UPDATE {TABLE_NAME} SET CATCH_UP = ? WHERE NO = ?", (catch_up, no))
+        conn.commit()
+
+def get_stats(start_date, end_date):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        query = f"SELECT COUNT(*), SUM(CASE WHEN CNF_YN = 'Y' THEN 1 ELSE 0 END) FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ?"
+        cursor.execute(query, (start_date, end_date))
+        total, completed = cursor.fetchone()
+        total = total or 0
+        completed = completed or 0
+        return total, completed, total - completed
+
+def get_category_stats(start_date, end_date):
+    with sqlite3.connect(DB_PATH) as conn:
+        query = f"SELECT WGUBUN_CDNM as name, COUNT(*) as value FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ? GROUP BY WGUBUN_CDNM"
+        return pd.read_sql_query(query, conn, params=(start_date, end_date))
+
+def get_dept_stats(start_date, end_date):
+    with sqlite3.connect(DB_PATH) as conn:
+        query = f"SELECT PART as name, COUNT(*) as value FROM {TABLE_NAME} WHERE REQUEST_DE BETWEEN ? AND ? GROUP BY PART"
+        return pd.read_sql_query(query, conn, params=(start_date, end_date))
+
+def get_monthly_trends(start_date, end_date):
+    with sqlite3.connect(DB_PATH) as conn:
+        query = f"""
+            SELECT 
+                CASE WHEN REQUEST_DE LIKE '%-%' THEN SUBSTR(REQUEST_DE, 6, 2) ELSE SUBSTR(REQUEST_DE, 5, 2) END as month,
+                SUBSTR(REQUEST_DE, 1, 4) as year,
+                CNF_YN, COUNT(*) as count
+            FROM {TABLE_NAME} WHERE  SUBSTR(REQUEST_DE, 1, 4) BETWEEN ? AND ? GROUP BY month, CNF_YN
+        """
+        return pd.read_sql_query(query, conn, params=(start_date, end_date))
+
+def get_similar_requests(reason):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        query = f"SELECT * FROM {TABLE_NAME} WHERE (REASON LIKE ? OR WGUBUN_NM LIKE ?) AND CATCH_UP != '' ORDER BY NO DESC LIMIT 6"
+        search = f"%{reason[:20]}%"
+        cursor.execute(query, (search, search))
         return [dict(row) for row in cursor.fetchall()]

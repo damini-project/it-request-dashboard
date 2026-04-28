@@ -1,4 +1,5 @@
 import os
+import io
 import pandas as pd
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,12 +55,34 @@ def get_requests():
 
 @app.post("/api/upload-excel")
 async def upload_excel(file: UploadFile = File(...)):
-    """엑셀 업로드 및 DB 저장"""
     try:
-        df = pd.read_excel(file.file)
+        contents = await file.read()
+        file_stream = io.BytesIO(contents)
+        
+        # 파일 확장자 확인 및 처리
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file_stream)
+        elif file.filename.endswith('.xlsx'):
+            df = pd.read_excel(file_stream, engine='openpyxl')
+        elif file.filename.endswith('.xls'):
+            try:
+                # 1단계: xlrd 시도
+                df = pd.read_excel(file_stream, engine='xlrd')
+            except Exception:
+                # 2단계: 실패 시 HTML로 파싱 시도
+                file_stream.seek(0)
+                dfs = pd.read_html(file_stream)
+                if dfs:
+                    df = dfs[0]
+                else:
+                    raise ValueError("파일을 읽을 수 없습니다.")
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+
         db.insert_excel_data(df)
         return {"message": "Successfully uploaded and saved data"}
     except Exception as e:
+        print(f"업로드 에러: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/requests/{no}/catchup")
