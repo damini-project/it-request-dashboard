@@ -154,7 +154,7 @@ def get_similar_requests(reason):
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        query = f"SELECT * FROM {TABLE_NAME} WHERE (REASON LIKE ? OR WGUBUN_NM LIKE ?) AND CATCH_UP != '' ORDER BY NO DESC LIMIT 6"
+        query = f"SELECT * FROM {TABLE_NAME} WHERE (REASON LIKE ? OR WGUBUN_NM LIKE ?) AND NVL(CATCH_UP, '####') != '' ORDER BY NO DESC LIMIT 6"
         search = f"%{reason[:20]}%"
         cursor.execute(query, (search, search))
         return [dict(row) for row in cursor.fetchall()]

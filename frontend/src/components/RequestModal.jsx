@@ -84,10 +84,14 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
                 <div className="text-xs text-gray-500 mb-1">카테고리</div>
                 <div className="text-sm text-white font-medium">{request.WGUBUN_CDNM}</div>
               </div>
-              <div className="col-span-2">
+              <div>
                 <div className="text-xs text-gray-500 mb-1">파트</div>
                 <div className="text-sm text-white font-medium">{getPartName(request.PART)}</div>
               </div>
+              <div>
+                  <div className="text-xs text-gray-500 mb-1">담당자</div>
+                  <div className="text-sm text-white font-medium">{getPartName(request.DEVELOPER2)}</div>
+                </div>
             </div>
 
             <div>
