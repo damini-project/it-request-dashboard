@@ -28,7 +28,7 @@ def init_db():
                 REQUESTER2 TEXT,
                 WGUBUN_NM TEXT,
                 RESPONSE TEXT,
-                LESS_RESPONSE TEXT,
+                LESSRESPONSE TEXT,
                 RMK TEXT,
                 SLIP_DE TEXT,
                 SLIP_NO TEXT,
@@ -52,16 +52,9 @@ def insert_excel_data(df):
         '번호': 'NO', '작업상태': 'WORK_YN', '요청제목': 'WGUBUN_NM', '요청내용': 'REASON',
         '구분코드': 'WGUBUN_CD', '구분명': 'WGUBUN_CDNM', '요청자사번': 'REQUESTER',
         '요청자': 'REQUESTER2', '요청일자': 'REQUEST_DE', '확인여부': 'CNF_YN', '파트': 'PART',
-        '검토내용': 'RESPONSE', '미진사유': 'LESS_RESPONSE', 'CATCH_UP': 'CATCH_UP',
+        '검토내용': 'RESPONSE', '미진사유': 'LESSRESPONSE', 'CATCH_UP': 'CATCH_UP',
         '비고': 'RMK', '전표일자': 'SLIP_DE', '전표번호': 'SLIP_NO', '상계전표': 'UNPY_SLIP',
-        '브랜드코드': 'BRAND_CD', '개발자': 'DEVELOPER', '개발자2': 'DEVELOPER2', '검토여부': 'RESPONSE_YN',
-
-        # 영어 원본 컬럼 대응
-        'NO': 'NO', 'WORK_YN': 'WORK_YN', 'WGUBUN_NM': 'WGUBUN_NM', 'REASON': 'REASON',
-        'REQUEST_DE': 'REQUEST_DE', 'PART': 'PART', 'REQUESTER2': 'REQUESTER2',
-        'RESPONSE': 'RESPONSE', 'LESSRESPONSE': 'LESS_RESPONSE', 'CATCH_UP': 'CATCH_UP',
-        'RMK': 'RMK', 'BRAND_CD': 'BRAND_CD', 'DEVELOPER': 'DEVELOPER',
-        'DEVELOPER2': 'DEVELOPER2', 'RESPONSE_YN': 'RESPONSE_YN'
+        '브랜드코드': 'BRAND_CD', '개발자': 'DEVELOPER', '개발자2': 'DEVELOPER2', '검토여부': 'RESPONSE_YN'
     }
 
     df = df.rename(columns=mapping)
@@ -75,7 +68,7 @@ def insert_excel_data(df):
     db_columns = [
         'NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM',
         'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM',
-        'RESPONSE', 'LESS_RESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP',
+        'RESPONSE', 'LESSRESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP',
         'BRAND_CD', 'DEVELOPER', 'DEVELOPER2', 'RESPONSE_YN'
     ]
 
@@ -145,14 +138,17 @@ def get_dept_stats(start_date, end_date):
 
 def get_monthly_trends(start_date, end_date):
     with sqlite3.connect(DB_PATH) as conn:
+        year = start_date[:4] if start_date else ""
+
         query = f"""
             SELECT 
                 CASE WHEN REQUEST_DE LIKE '%-%' THEN SUBSTR(REQUEST_DE, 6, 2) ELSE SUBSTR(REQUEST_DE, 5, 2) END as month,
-                SUBSTR(REQUEST_DE, 1, 4) as year,
                 CNF_YN, COUNT(*) as count
-            FROM {TABLE_NAME} WHERE  SUBSTR(REQUEST_DE, 1, 4) BETWEEN ? AND ? GROUP BY month, CNF_YN
+            FROM {TABLE_NAME} 
+            WHERE REQUEST_DE LIKE ? 
+            GROUP BY month, CNF_YN
         """
-        return pd.read_sql_query(query, conn, params=(start_date, end_date))
+        return pd.read_sql_query(query, conn, params=(f"{year}%",))
 
 def get_similar_requests(reason):
     with sqlite3.connect(DB_PATH) as conn:

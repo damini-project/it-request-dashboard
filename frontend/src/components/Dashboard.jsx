@@ -7,28 +7,42 @@ const PART_MAP = {
   '01': '생산기획', '02': '영업물류', '03': '인사', '04': '회계', '05': '팀장', '06': '기타', '07': '개발'
 };
 
-const WORK_STAT_MAP = {
-  '1': '완료', '2': '진행중', '3': '미착수', '4': '종결',
-};
-
 const Dashboard = ({ onNavigate, setRequestFilter }) => {
-  const [filters, setFilters] = useState({ startDate: '2026-04-01', endDate: '2026-04-24', part: '' });
+  // 날짜 기본값 설정 (한 달 전 ~ 오늘)
+  const today = new Date();
+  const lastMonth = new Date();
+  lastMonth.setMonth(today.getMonth() - 1);
+  const formatDate = (d) => d.toISOString().split('T')[0];
+
+  const currentYear = today.getFullYear().toString();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => (parseInt(currentYear) - 2 + i).toString());
+
+  // --- 상태 관리 ---
+  const [filters, setFilters] = useState({startDate: formatDate(lastMonth), endDate: formatDate(today), part: ''});
   const [stats, setStats] = useState({ total: 0, completed: 0, in_progress: 0, pending: 0 });
-  const [charts, setCharts] = useState({ category_stats: [], dept_stats: [], monthly_trend: [] });
+  const [charts, setCharts] = useState({ category_stats: [], dept_stats: [] });
   const [loading, setLoading] = useState(false);
 
-  // 1. 파일 업로드를 위한 Ref 생성
+  // 월별 전용 상태 관리
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [monthlyData, setMonthlyData] = useState([]);
+
   const fileInputRef = useRef(null);
 
+  // --- 데이터 호출 ---
   useEffect(() => {
     fetchData();
   }, [filters]);
 
+  useEffect(() => {
+    fetchMonthlyData(selectedYear);
+  }, [selectedYear]);
+
   const fetchData = async () => {
     try {
       const queryParams = {
-        start_date: filters.startDate.replace(/-/g, ''),
-        end_date: filters.endDate.replace(/-/g, ''),
+        start_date: filters.startDate,
+        end_date: filters.endDate,
         part: filters.part
       };
 
@@ -43,20 +57,32 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
       const resCharts = await axios.get('http://localhost:8000/api/dashboard-charts', { params: queryParams });
       setCharts({
         category_stats: resCharts.data.category_stats || [],
-        dept_stats: resCharts.data.dept_stats || [],
-        monthly_trend: resCharts.data.monthly_trend || []
+        dept_stats: resCharts.data.dept_stats || []
       });
     } catch (e) {
       console.error("데이터 로드 실패:", e);
     }
   };
 
-  // 2. 엑셀 업로드 버튼 클릭 핸들러
+  const fetchMonthlyData = async (year) => {
+    try {
+      const queryParams = {
+        start_date: year,
+        end_date: year,
+        part: ''
+      };
+      const res = await axios.get('http://localhost:8000/api/dashboard-charts', { params: queryParams });
+      setMonthlyData(res.data.monthly_trend || []);
+    } catch (err) {
+      console.error("월별 통계 로드 실패:", err);
+    }
+  };
+
+  // --- 핸들러 ---
   const handleUploadClick = () => {
     fileInputRef.current.click();
   };
 
-  // 3. 파일 선택 시 실행될 로직
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -68,7 +94,8 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
     try {
       await axios.post('http://localhost:8000/api/upload-excel', formData);
       alert('데이터가 성공적으로 업로드되었습니다.');
-      fetchData(); // 데이터 새로고침
+      fetchData();
+      fetchMonthlyData(selectedYear);
     } catch (err) {
       console.error("업로드 실패:", err);
       alert('업로드 실패: ' + err.message);
@@ -83,12 +110,13 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
   };
 
   const metricCards = [
-      { title: '📋 총 요청', value: stats.total, color: 'text-blue-400', status: 'ALL' },
-      { title: '✅ 완료', value: stats.completed, color: 'text-emerald-400', status: '1' },
-      { title: '🔄 진행중', value: stats.in_progress, color: 'text-yellow-400', status: '2' },
-      { title: '🔴 미착수', value: stats.pending, color: 'text-red-400', status: '3' }
-    ];
+    { title: '📋 총 요청', value: stats.total, color: 'text-blue-400', status: 'ALL' },
+    { title: '✅ 완료', value: stats.completed, color: 'text-emerald-400', status: '1' },
+    { title: '🔄 진행중', value: stats.in_progress, color: 'text-yellow-400', status: '2' },
+    { title: '🔴 미착수', value: stats.pending, color: 'text-red-400', status: '3' }
+  ];
 
+  // --- 차트 옵션 ---
   const deptChartOptions = {
     chart: { type: 'bar', toolbar: { show: false }, background: 'transparent' },
     theme: { mode: 'dark' },
@@ -100,11 +128,11 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
       style: { fontSize: '12px', fontWeight: 'bold', colors: ["#FFFFFF"] }
     },
     xaxis: {
-     categories: charts.dept_stats.map(d => {
-             const partCode = String(d.PART).padStart(2, '0');
-             return PART_MAP[partCode] || String(d.PART);
-           }),
-           labels: { style: { colors: '#A0AEC0' } }
+     categories: (charts.dept_stats || []).map(d => {
+       const partCode = String(d.name).padStart(2, '0');
+       return PART_MAP[partCode] || String(d.name);
+     }),
+     labels: { style: { colors: '#A0AEC0' } }
     },
     yaxis: { labels: { style: { colors: '#A0AEC0' } } },
     colors: ['#06B6D4', '#10B981', '#F59E0B', '#F97316', '#8B5CF6', '#EF4444', '#EC4899'],
@@ -115,7 +143,7 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
   const trendChartOptions = {
     chart: { type: 'bar', stacked: true, toolbar: { show: false }, background: 'transparent' },
     theme: { mode: 'dark' },
-    xaxis: { categories: charts.monthly_trend.map(m => m.month), labels: { style: { colors: '#A0AEC0' } } },
+    xaxis: { categories: (monthlyData || []).map(m => m.month), labels: { style: { colors: '#A0AEC0' } } },
     yaxis: { labels: { style: { colors: '#A0AEC0' } } },
     colors: ['#32D74B', '#FFD60A', '#FF453A'],
     legend: { position: 'bottom', labels: { colors: '#FFFFFF' } },
@@ -123,6 +151,7 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
     plotOptions: { bar: { borderRadius: 2 } }
   };
 
+  // --- UI 렌더링 ---
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -155,7 +184,6 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
              {Object.entries(PART_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
 
-          {/* 4. 시스템 정상 버튼 대신 엑셀 업로드 버튼 추가 */}
           <input
             type="file"
             ref={fileInputRef}
@@ -185,37 +213,58 @@ const Dashboard = ({ onNavigate, setRequestFilter }) => {
 
       {/* Row 2: Visualization */}
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-[#1A1C23] p-6 rounded-xl border border-[#2D2F39] shadow-lg">
-          <h3 className="flex items-center gap-2 font-bold mb-6 text-white"><ClipboardList size={18} className="text-yellow-500"/> 카테고리별 요청 건수</h3>
-          <div className="space-y-4">
-            {charts.category_stats.map((c, i) => (
-              <div key={i} className="flex items-center">
-                <span className="w-40 text-sm text-gray-300">{c.WGUBUN_CDNM}</span>
-                <div className="flex-1 h-2.5 bg-[#2D2F39] rounded-full mx-4 overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-1000" style={{
-                    width: `${(c.count / (stats.total || 1)) * 100}%`,
-                    backgroundColor: ['#32D74B', '#FFD60A', '#06B6D4', '#FF453A'][i % 4]
-                  }}></div>
+          {/* 카테고리별 */}
+          <div className="bg-[#1A1C23] p-6 rounded-xl border border-[#2D2F39] shadow-lg">
+            <h3 className="flex items-center gap-2 font-bold mb-6 text-white"><ClipboardList size={18} className="text-yellow-500"/> 카테고리별 요청 건수</h3>
+            <div className="space-y-4">
+              {(charts.category_stats || []).map((c, i) => (
+                <div key={i} className="flex items-center">
+                  <span className="w-40 text-sm text-gray-300">{c.name}</span>
+                  <div className="flex-1 h-2.5 bg-[#2D2F39] rounded-full mx-4 overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-1000" style={{
+                      width: `${(c.value / (stats.total || 1)) * 100}%`,
+                      backgroundColor: ['#32D74B', '#FFD60A', '#06B6D4', '#FF453A'][i % 4]
+                    }}></div>
+                  </div>
+                  <span className="w-8 text-right text-sm font-bold text-white">{c.value}건</span>
                 </div>
-                <span className="w-8 text-right text-sm font-bold text-white">{c.count}건</span>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          {/* 파트별 */}
+          <div className="bg-[#1A1C23] p-6 rounded-xl border border-[#2D2F39] shadow-lg">
+            <h3 className="flex items-center gap-2 font-bold mb-4 text-white">
+              <Briefcase size={18} className="text-blue-400"/> 파트별 요청 건수
+            </h3>
+            <Chart options={deptChartOptions} series={[{ name: '요청 건수', data: (charts.dept_stats || []).map(d => d.value) }]} type="bar" height={220} />
           </div>
         </div>
-        <div className="bg-[#1A1C23] p-6 rounded-xl border border-[#2D2F39] shadow-lg">
-          <h3 className="flex items-center gap-2 font-bold mb-4 text-white"><Briefcase size={18} className="text-blue-400"/> 파트별 요청 건수</h3>
-          <Chart options={deptChartOptions} series={[{ name: '요청 건수', data: charts.dept_stats.map(d => d.count) }]} type="bar" height={220} />
-        </div>
-      </div>
 
       {/* Row 3: Trend */}
       <div className="bg-[#1A1C23] p-6 rounded-xl border border-[#2D2F39] shadow-lg">
-        <h3 className="flex items-center gap-2 font-bold mb-4 text-white"><TrendingUp size={18} className="text-orange-400"/> 월별 처리 현황 (2026년)</h3>
-        <Chart options={trendChartOptions} series={[
-          { name: '처리완료', data: charts.monthly_trend.map(m => m.done || 0) },
-          { name: '진행중', data: charts.monthly_trend.map(m => m.in_progress || 0) },
-          { name: '미처리', data: charts.monthly_trend.map(m => m.pending || 0) }
-        ]} type="bar" height={250} />
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="flex items-center gap-2 font-bold text-white">
+            <TrendingUp size={18} className="text-orange-400"/> 월별 처리 현황 ({selectedYear}년)
+          </h3>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="bg-[#0E1117] text-white border border-[#2D2F39] rounded-lg px-3 py-1 text-sm outline-none focus:border-orange-500"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
+          </select>
+        </div>
+
+        <Chart
+          options={trendChartOptions}
+          series={[
+            { name: '처리완료', data: (monthlyData || []).map(m => m.done || 0) },
+            { name: '진행중', data: (monthlyData || []).map(m => m.in_progress || 0) },
+            { name: '미처리', data: (monthlyData || []).map(m => m.pending || 0) }
+          ]}
+          type="bar" height={250}
+        />
       </div>
     </div>
   );

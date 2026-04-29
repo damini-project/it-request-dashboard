@@ -58,7 +58,7 @@ async def upload_excel(file: UploadFile = File(...)):
     try:
         contents = await file.read()
         file_stream = io.BytesIO(contents)
-        
+
         # 파일 확장자 확인 및 처리
         if file.filename.endswith('.csv'):
             df = pd.read_csv(file_stream)

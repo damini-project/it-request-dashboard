@@ -12,6 +12,17 @@ const WORK_STAT_MAP = {
 };
 
 const RequestList = ({ filterStatus }) => {
+  // 🌟 1. 대시보드와 동일한 날짜 기본값 설정 (한 달 전 ~ 오늘)
+  const today = new Date();
+  const lastMonth = new Date();
+  lastMonth.setMonth(today.getMonth() - 1);
+  const formatDate = (d) => d.toISOString().split('T')[0];
+
+  const [dateFilters, setDateFilters] = useState({
+    startDate: formatDate(lastMonth),
+    endDate: formatDate(today)
+  });
+
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +58,7 @@ const RequestList = ({ filterStatus }) => {
 
   const normalizeWorkStatus = (val) => {
     if (!val) return '';
-    const s = String(val).trim(); // 공백 제거
+    const s = String(val).trim();
     if (s === '1' || s === '1.0' || s === '완료') return '1';
     if (s === '2' || s === '2.0' || s === '진행중') return '2';
     if (s === '3' || s === '3.0' || s === '미착수') return '3';
@@ -56,20 +67,14 @@ const RequestList = ({ filterStatus }) => {
   };
 
   const getStatusBadge = (status) => {
-    // raw status 값을 정규화 함수에 한 번 통과시킵니다.
     const normStatus = normalizeWorkStatus(status);
 
     switch (normStatus) {
-      case '1': // 완료
-        return <span className="flex items-center gap-1 bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-500/30"><CheckCircle size={12}/> 완료</span>;
-      case '2': // 진행중
-        return <span className="flex items-center gap-1 bg-yellow-500/20 text-yellow-400 px-2.5 py-1 rounded-full text-xs font-bold border border-yellow-500/30"><Clock size={12}/> 진행중</span>;
-      case '3': // 미착수
-        return <span className="flex items-center gap-1 bg-red-500/20 text-red-400 px-2.5 py-1 rounded-full text-xs font-bold border border-red-500/30"><AlertCircle size={12}/> 미착수</span>;
-      case '4': // 종결
-        return <span className="flex items-center gap-1 bg-gray-500/20 text-gray-400 px-2.5 py-1 rounded-full text-xs font-bold border border-gray-500/30"><CheckSquare size={12}/> 종결</span>;
-      default:
-        return <span className="flex items-center gap-1 bg-[#2D2F39] text-gray-400 px-2.5 py-1 rounded-full text-xs font-bold border border-gray-600">상태없음 ({status})</span>; // 원인 파악을 위해 이상한 값이면 괄호 안에 출력해 줍니다.
+      case '1': return <span className="flex items-center gap-1 bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-500/30"><CheckCircle size={12}/> 완료</span>;
+      case '2': return <span className="flex items-center gap-1 bg-yellow-500/20 text-yellow-400 px-2.5 py-1 rounded-full text-xs font-bold border border-yellow-500/30"><Clock size={12}/> 진행중</span>;
+      case '3': return <span className="flex items-center gap-1 bg-red-500/20 text-red-400 px-2.5 py-1 rounded-full text-xs font-bold border border-red-500/30"><AlertCircle size={12}/> 미착수</span>;
+      case '4': return <span className="flex items-center gap-1 bg-gray-500/20 text-gray-400 px-2.5 py-1 rounded-full text-xs font-bold border border-gray-500/30"><CheckSquare size={12}/> 종결</span>;
+      default: return <span className="flex items-center gap-1 bg-[#2D2F39] text-gray-400 px-2.5 py-1 rounded-full text-xs font-bold border border-gray-600">상태없음 ({status})</span>;
     }
   };
 
@@ -79,19 +84,33 @@ const RequestList = ({ filterStatus }) => {
     return PART_MAP[code] || partCode;
   };
 
+  // 🌟 2. 날짜 문자열 정규화 함수 (하이픈 유무 상관없이 YYYYMMDD로 통일하여 비교)
+  const normalizeDateStr = (dateStr) => {
+    if (!dateStr) return '';
+    return dateStr.replace(/-/g, '').substring(0, 8);
+  };
+
   const filteredRequests = requests.filter(req => {
-    // 🔥 필터링할 때도 정규화된 값을 기준으로 비교합니다.
     const normStatus = normalizeWorkStatus(req.WORK_YN);
     const matchStatus = localFilters.status === 'ALL' || normStatus === localFilters.status;
     const matchCategory = localFilters.category === 'ALL' || req.WGUBUN_CDNM === localFilters.category;
     const matchPart = localFilters.part === 'ALL' || String(req.PART).padStart(2, '0') === localFilters.part;
+
     const matchSearch =
       req.REASON?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       req.WGUBUN_NM?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       req.REQUESTER2?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       req.NO?.toString().includes(searchTerm);
 
-    return matchStatus && matchCategory && matchPart && matchSearch;
+    // 🌟 3. 일자 조회 조건 로직 적용
+    const reqDateNorm = normalizeDateStr(req.REQUEST_DE);
+    const startNorm = normalizeDateStr(dateFilters.startDate);
+    const endNorm = normalizeDateStr(dateFilters.endDate);
+
+    // 데이터에 날짜가 없으면 통과시키거나, 설정된 기간 안에 들어오는지 확인
+    const matchDate = reqDateNorm ? (reqDateNorm >= startNorm && reqDateNorm <= endNorm) : true;
+
+    return matchStatus && matchCategory && matchPart && matchSearch && matchDate;
   });
 
   const categories = ['ALL', ...new Set(requests.map(req => req.WGUBUN_CDNM).filter(Boolean))];
@@ -117,9 +136,26 @@ const RequestList = ({ filterStatus }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 pt-4 border-t border-[#2D2F39]">
-          <div className="flex items-center gap-2 text-gray-400 text-sm">
+        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-[#2D2F39]">
+          <div className="flex items-center gap-2 text-gray-400 text-sm whitespace-nowrap">
             <Filter size={14} /> 필터 상세:
+          </div>
+
+          {/* 🌟 4. 날짜 필터 UI (대시보드와 동일한 디자인) */}
+          <div className="flex items-center gap-2 bg-[#0E1117] p-1.5 px-3 rounded-lg border border-[#374151]">
+            <input
+              type="date"
+              value={dateFilters.startDate}
+              className="bg-transparent text-white border-none text-xs focus:outline-none focus:ring-0 cursor-pointer [color-scheme:dark]"
+              onChange={(e) => setDateFilters({...dateFilters, startDate: e.target.value})}
+            />
+            <span className="text-gray-500 text-xs">~</span>
+            <input
+              type="date"
+              value={dateFilters.endDate}
+              className="bg-transparent text-white border-none text-xs focus:outline-none focus:ring-0 cursor-pointer [color-scheme:dark]"
+              onChange={(e) => setDateFilters({...dateFilters, endDate: e.target.value})}
+            />
           </div>
 
           <select
@@ -151,8 +187,12 @@ const RequestList = ({ filterStatus }) => {
           </select>
 
           <button
-            onClick={() => {setLocalFilters({status:'ALL', category:'ALL', part:'ALL'}); setSearchTerm('');}}
-            className="ml-auto text-xs text-gray-500 hover:text-white underline"
+            onClick={() => {
+              setLocalFilters({status:'ALL', category:'ALL', part:'ALL'});
+              setDateFilters({startDate: formatDate(lastMonth), endDate: formatDate(today)});
+              setSearchTerm('');
+            }}
+            className="ml-auto text-xs text-gray-500 hover:text-white underline whitespace-nowrap"
           >
             필터 초기화
           </button>
