@@ -33,10 +33,11 @@ def init_db():
                 SLIP_DE TEXT,
                 SLIP_NO TEXT,
                 UNPY_SLIP TEXT,
-                BRAND_CD TEXT,      -- 추가
-                DEVELOPER TEXT,     -- 추가
-                DEVELOPER2 TEXT,    -- 추가
-                RESPONSE_YN TEXT    -- 추가
+                BRAND_CD TEXT,
+                DEVELOPER TEXT,
+                DEVELOPER2 TEXT,
+                RESPONSE_YN TEXT,
+                TASK_DETAIL TEXT
             )
         ''')
         conn.commit()
@@ -69,7 +70,7 @@ def insert_excel_data(df):
         'NO', 'WORK_YN', 'REASON', 'CATCH_UP', 'WGUBUN_CD', 'WGUBUN_CDNM',
         'REQUESTER', 'REQUEST_DE', 'CNF_YN', 'PART', 'REQUESTER2', 'WGUBUN_NM',
         'RESPONSE', 'LESSRESPONSE', 'RMK', 'SLIP_DE', 'SLIP_NO', 'UNPY_SLIP',
-        'BRAND_CD', 'DEVELOPER', 'DEVELOPER2', 'RESPONSE_YN'
+        'BRAND_CD', 'DEVELOPER', 'DEVELOPER2', 'RESPONSE_YN', 'TASK_DETAIL'
     ]
 
     final_cols = [c for c in db_columns if c in df.columns]
@@ -154,17 +155,25 @@ def get_similar_requests(reason):
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        query = f"SELECT * FROM {TABLE_NAME} WHERE (REASON LIKE ? OR WGUBUN_NM LIKE ?) AND NVL(CATCH_UP, '####') != '' ORDER BY NO DESC LIMIT 6"
+
+        # 🚨 NVL 대신 SQLite 전용인 IFNULL을 사용하도록 쿼리 수정
+        query = f"""
+            SELECT * FROM {TABLE_NAME} 
+            WHERE (REASON LIKE ? OR WGUBUN_NM LIKE ?) 
+            AND IFNULL(CATCH_UP, '') != '' 
+            ORDER BY NO DESC 
+            LIMIT 6
+        """
         search = f"%{reason[:20]}%"
         cursor.execute(query, (search, search))
         return [dict(row) for row in cursor.fetchall()]
 
-def update_assignment(no, part, developer):
-    """특정 요청의 파트(PART)와 담당자(DEVELOPER2) 업데이트"""
+def update_assignment(no, part, developer, task_detail):
+    """특정 요청의 파트, 담당자 및 작업 상세 내용 업데이트"""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"UPDATE {TABLE_NAME} SET PART = ?, DEVELOPER2 = ? WHERE NO = ?",
-            (part, developer, no)
+            f"UPDATE {TABLE_NAME} SET PART=?, DEVELOPER2=?, TASK_DETAIL=? WHERE NO=?",
+            (part, developer, task_detail, no)
         )
         conn.commit()

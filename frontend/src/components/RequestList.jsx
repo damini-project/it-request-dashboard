@@ -175,7 +175,7 @@ const RequestList = ({ filterStatus }) => {
           <select
             value={localFilters.part}
             onChange={(e) => setLocalFilters({...localFilters, part: e.target.value})}
-            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer font-bold text-blue-400"
+            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer text-blue-400"
           >
             <option value="ALL">전체 파트</option>
             <option value="NONE" className="text-red-400 font-bold">⚠️ 파트 미지정</option>
@@ -185,7 +185,7 @@ const RequestList = ({ filterStatus }) => {
           <select
             value={localFilters.developer}
             onChange={(e) => setLocalFilters({...localFilters, developer: e.target.value})}
-            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer font-bold text-blue-400"
+            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer text-blue-400"
           >
             <option value="ALL">전체 담당자</option>
             <option value="NONE" className="text-red-400 font-bold">⚠️ 담당자 미지정</option>
@@ -298,19 +298,27 @@ const RequestList = ({ filterStatus }) => {
         </div>
       )}
 
-      {selectedRequest && (
-        <RequestModal
-          request={selectedRequest}
-          developerList={developerList} // 🌟 개발자 목록 전달
-          onClose={() => {
-            setSelectedRequest(null);
-            fetchRequests();
-          }}
-          getStatusBadge={getStatusBadge}
-          getPartName={getPartName}
-        />
-      )}
-    </div>
+      {/* 모달 */}
+        {selectedRequest && (
+          <RequestModal
+            request={selectedRequest}
+            developerList={developerList}
+            onClose={(updatedFields) => {
+              // 🌟 만약 저장버튼을 눌러서 updatedFields가 넘어왔다면, 로컬 상태만 교체!
+              if (updatedFields) {
+                setRequests(prevRequests => prevRequests.map(req =>
+                  req.NO === selectedRequest.NO
+                    ? { ...req, ...updatedFields } // 바뀐 데이터만 덮어쓰기
+                    : req
+                ));
+              }
+              setSelectedRequest(null); // 모달 닫기
+            }}
+            getStatusBadge={getStatusBadge}
+            getPartName={getPartName}
+          />
+        )}
+      </div>
   );
 };
 
