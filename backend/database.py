@@ -158,3 +158,13 @@ def get_similar_requests(reason):
         search = f"%{reason[:20]}%"
         cursor.execute(query, (search, search))
         return [dict(row) for row in cursor.fetchall()]
+
+def update_assignment(no, part, developer):
+    """특정 요청의 파트(PART)와 담당자(DEVELOPER2) 업데이트"""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE {TABLE_NAME} SET PART = ?, DEVELOPER2 = ? WHERE NO = ?",
+            (part, developer, no)
+        )
+        conn.commit()

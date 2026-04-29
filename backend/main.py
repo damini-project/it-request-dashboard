@@ -6,8 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from dotenv import load_dotenv
-from google import genai  # 2026년 최신 Google Gen AI SDK
+from google import genai
 import database as db
+from pydantic import BaseModel
 
 # 환경 변수 로드 (.env 파일의 GEMINI_API_KEY 읽기)
 load_dotenv()
@@ -37,6 +38,10 @@ class AnalysisRequest(BaseModel):
 
 class CatchupUpdate(BaseModel):
     catch_up: str
+
+class AssignRequest(BaseModel):
+    part: str
+    developer: str
 
 # Gemini 클라이언트 초기화 (2026년형 SDK 문법)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -128,6 +133,14 @@ def get_dashboard_charts(start_date: str, end_date: str):
         "dept_stats": db.get_dept_stats(start_date, end_date).to_dict(orient="records"),
         "monthly_trend": monthly_trend
     }
+
+@app.put("/api/requests/{no}/assign")
+async def assign_request(no: str, data: AssignRequest):
+    try:
+        db.update_assignment(no, data.part, data.developer)
+        return {"message": "Assignment updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --- [3. AI 분석 및 유사 내역 API] ---
 

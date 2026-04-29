@@ -1,17 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Sparkles, Bot, History, ChevronRight } from 'lucide-react';
+import { X, Search, Sparkles, Bot, History, Save } from 'lucide-react';
 import axios from 'axios';
 
-const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
+// 모달 내부에서도 파트 목록을 쓰기 위해 맵핑 추가
+const PART_MAP = {
+  '01': '생산기획', '02': '영업물류', '03': '인사', '04': '회계', '05': '팀장', '06': '기타', '07': '개발'
+};
+
+// 🌟 부모 컴포넌트(RequestList)로부터 developerList를 받도록 props 추가
+const RequestModal = ({ request, developerList, onClose, getStatusBadge, getPartName }) => {
   const [similarRequests, setSimilarRequests] = useState([]);
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
+  // 🌟 담당자/파트 수정을 위한 상태 추가
+  const [editPart, setEditPart] = useState('');
+  const [editDeveloper, setEditDeveloper] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     if (request) {
       fetchSimilarRequests();
       setAiAnalysis('');
+
+      // 🌟 파트 값 정규화 (1 -> 01 로 패딩 처리하여 콤보박스와 매칭)
+      const partValue = request.PART && request.PART !== 'null' ? String(request.PART).padStart(2, '0') : '';
+      setEditPart(partValue);
+      setEditDeveloper(request.DEVELOPER2 || '');
     }
   }, [request]);
 
@@ -19,9 +35,9 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
     setIsSearching(true);
     try {
       const res = await axios.get(`http://localhost:8000/api/similar?reason=${encodeURIComponent(request.REASON)}`);
-
       const filteredData = (res.data || []).filter(item => item.NO !== request.NO);
       setSimilarRequests(filteredData);
+    } catch (e) {
       console.error("유사 내역 로드 실패", e);
     } finally {
       setIsSearching(false);
@@ -30,18 +46,33 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
 
   const handleAiAnalyze = async () => {
     if (similarRequests.length === 0) return;
-
     setIsAiLoading(true);
     try {
-      const res = await axios.post('http://localhost:8000/api/ai-analyze', {
-        requests: similarRequests
-      });
+      const res = await axios.post('http://localhost:8000/api/ai-analyze', { requests: similarRequests });
       setAiAnalysis(res.data.analysis);
     } catch (e) {
       console.error("AI 분석 실패", e);
       setAiAnalysis("AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
       setIsAiLoading(false);
+    }
+  };
+
+  // 🌟 저장 버튼 클릭 핸들러
+  const handleSaveDetails = async () => {
+    setIsSaving(true);
+    try {
+      await axios.put(`http://localhost:8000/api/requests/${request.NO}/assign`, {
+        part: editPart,
+        developer: editDeveloper
+      });
+      alert('파트 및 담당자가 성공적으로 지정되었습니다.');
+      onClose(); // 저장 완료 후 모달 닫기 (부모 컴포넌트에서 목록 자동 갱신됨)
+    } catch (e) {
+      console.error("저장 실패", e);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -67,31 +98,71 @@ const RequestModal = ({ request, onClose, getStatusBadge, getPartName }) => {
 
           {/* [좌측] 기존 요청 상세 내역 */}
           <div className="w-1/2 p-6 overflow-y-auto border-r border-[#2D2F39] space-y-6">
-            <div className="grid grid-cols-2 gap-6 bg-[#0E1117] p-4 rounded-xl border border-[#2D2F39]">
-              <div>
-                <div className="text-xs text-gray-500 mb-1">요청 번호</div>
-                <div className="text-sm text-white font-medium">{request.NO}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">요청 일자</div>
-                <div className="text-sm text-white font-medium">{request.REQUEST_DE}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">요청자</div>
-                <div className="text-sm text-white font-medium">{request.REQUESTER2}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">카테고리</div>
-                <div className="text-sm text-white font-medium">{request.WGUBUN_CDNM}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">파트</div>
-                <div className="text-sm text-white font-medium">{getPartName(request.PART)}</div>
-              </div>
-              <div>
-                  <div className="text-xs text-gray-500 mb-1">담당자</div>
-                  <div className="text-sm text-white font-medium">{getPartName(request.DEVELOPER2)}</div>
+
+            {/* 정보 그리드 */}
+            <div className="bg-[#0E1117] p-5 rounded-xl border border-[#2D2F39] space-y-5">
+              {/* 고정 정보 영역 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">요청 번호</div>
+                  <div className="text-sm text-white font-medium">{request.NO}</div>
                 </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">요청 일자</div>
+                  <div className="text-sm text-white font-medium">{request.REQUEST_DE}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">요청자</div>
+                  <div className="text-sm text-white font-medium">{request.REQUESTER2}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">카테고리</div>
+                  <div className="text-sm text-white font-medium">{request.WGUBUN_CDNM}</div>
+                </div>
+              </div>
+
+              {/* 🌟 편집 가능한 파트/담당자 지정 영역 */}
+              <div className="pt-4 border-t border-[#2D2F39] flex items-end gap-3">
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-blue-400 mb-1.5">파트 지정</div>
+                  <select
+                    value={editPart}
+                    onChange={(e) => setEditPart(e.target.value)}
+                    className="w-full bg-[#1A1C23] text-white text-sm p-2 rounded-lg border border-[#374151] focus:border-blue-500 outline-none transition"
+                  >
+                    <option value="">미지정</option>
+                    {Object.entries(PART_MAP).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-blue-400 mb-1.5">담당자 지정</div>
+                  {/* 🌟 수기 입력 input 대신 select 콤보박스로 변경 */}
+                  <select
+                    value={editDeveloper}
+                    onChange={(e) => setEditDeveloper(e.target.value)}
+                    className="w-full bg-[#1A1C23] text-white text-sm p-2 rounded-lg border border-[#374151] focus:border-blue-500 outline-none transition cursor-pointer"
+                  >
+                    <option value="">미지정</option>
+                    {/* ALL, NONE 등 필터용 특수값 제외하고 개발자 목록만 렌더링 */}
+                    {(developerList || [])
+                      .filter(dev => dev !== 'ALL' && dev !== 'NONE')
+                      .map(dev => (
+                        <option key={dev} value={dev}>{dev}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleSaveDetails}
+                  disabled={isSaving}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-bold h-[38px] flex items-center gap-2 transition"
+                >
+                  <Save size={16} /> {isSaving ? '저장중...' : '저장'}
+                </button>
+              </div>
             </div>
 
             <div>

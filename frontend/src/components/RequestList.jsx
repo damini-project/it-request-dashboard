@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Calendar, User, Tag, Search, CheckCircle, AlertCircle, Clock, FileText, Filter, CheckSquare, Link as LinkIcon } from 'lucide-react';
+import { Calendar, User, Tag, Search, CheckCircle, AlertCircle, Clock, FileText, Filter, CheckSquare, AlertTriangle } from 'lucide-react';
 import RequestModal from './RequestModal';
 
 const PART_MAP = {
@@ -27,7 +27,6 @@ const RequestList = ({ filterStatus }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  // 🌟 1. 상태 관리에 developer 항목 추가
   const [localFilters, setLocalFilters] = useState({
     status: filterStatus || 'ALL',
     category: 'ALL',
@@ -69,7 +68,6 @@ const RequestList = ({ filterStatus }) => {
 
   const getStatusBadge = (status) => {
     const normStatus = normalizeWorkStatus(status);
-
     switch (normStatus) {
       case '1': return <span className="flex items-center gap-1 bg-transparent text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/50">처리완료</span>;
       case '2': return <span className="flex items-center gap-1 bg-transparent text-yellow-400 px-3 py-1 rounded-full text-xs font-bold border border-yellow-500/50">진행중</span>;
@@ -80,7 +78,7 @@ const RequestList = ({ filterStatus }) => {
   };
 
   const getPartName = (partCode) => {
-    if (!partCode) return '미지정';
+    if (!partCode || partCode === '' || partCode === 'null') return null;
     const code = String(partCode).padStart(2, '0');
     return PART_MAP[code] || partCode;
   };
@@ -92,12 +90,18 @@ const RequestList = ({ filterStatus }) => {
 
   const filteredRequests = requests.filter(req => {
     const normStatus = normalizeWorkStatus(req.WORK_YN);
+
+    // 🌟 필터 로직 보완: 'NONE' 선택 시 빈 값 매칭
     const matchStatus = localFilters.status === 'ALL' || normStatus === localFilters.status;
     const matchCategory = localFilters.category === 'ALL' || req.WGUBUN_CDNM === localFilters.category;
-    const matchPart = localFilters.part === 'ALL' || String(req.PART).padStart(2, '0') === localFilters.part;
 
-    // 🌟 2. 개발자(DEVELOPER2) 필터링 조건 추가
-    const matchDeveloper = localFilters.developer === 'ALL' || req.DEVELOPER2 === localFilters.developer;
+    const matchPart = localFilters.part === 'ALL'
+      ? true
+      : (localFilters.part === 'NONE' ? (!req.PART || req.PART === '') : String(req.PART).padStart(2, '0') === localFilters.part);
+
+    const matchDeveloper = localFilters.developer === 'ALL'
+      ? true
+      : (localFilters.developer === 'NONE' ? (!req.DEVELOPER2 || req.DEVELOPER2 === '') : req.DEVELOPER2 === localFilters.developer);
 
     const matchSearch =
       req.REASON?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -111,17 +115,15 @@ const RequestList = ({ filterStatus }) => {
 
     const matchDate = reqDateNorm ? (reqDateNorm >= startNorm && reqDateNorm <= endNorm) : true;
 
-    // 리턴 조건에 matchDeveloper 추가
     return matchStatus && matchCategory && matchPart && matchDeveloper && matchSearch && matchDate;
   });
 
-  // 카테고리 및 개발자 목록 자동 추출 (중복 제거)
   const categories = ['ALL', ...new Set(requests.map(req => req.WGUBUN_CDNM).filter(Boolean))];
-  const developers = ['ALL', ...new Set(requests.map(req => req.DEVELOPER2).filter(Boolean))]; // 🌟 3. 개발자 목록 추출
+  const developers = ['ALL', 'NONE', ...new Set(requests.map(req => req.DEVELOPER2).filter(Boolean))];
+  const developerList = [...new Set(requests.map(req => req.DEVELOPER2).filter(Boolean))].sort();
 
   return (
     <div className="space-y-6">
-      {/* 1. 상단 검색 및 필터 영역 */}
       <div className="bg-[#1A1C23] p-5 rounded-xl border border-[#2D2F39] shadow-lg space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -173,20 +175,22 @@ const RequestList = ({ filterStatus }) => {
           <select
             value={localFilters.part}
             onChange={(e) => setLocalFilters({...localFilters, part: e.target.value})}
-            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer"
+            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer font-bold text-blue-400"
           >
             <option value="ALL">전체 파트</option>
-            {Object.entries(PART_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="NONE" className="text-red-400 font-bold">⚠️ 파트 미지정</option>
+            {Object.entries(PART_MAP).map(([k, v]) => <option key={k} value={k} className="text-white">{v}</option>)}
           </select>
 
-          {/* 🌟 4. 개발자 필터 콤보박스 UI 추가 */}
           <select
             value={localFilters.developer}
             onChange={(e) => setLocalFilters({...localFilters, developer: e.target.value})}
-            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer"
+            className="bg-[#0E1117] text-white text-xs p-2 rounded-lg border border-[#374151] cursor-pointer font-bold text-blue-400"
           >
-            {developers.map(dev => (
-              <option key={dev} value={dev}>{dev === 'ALL' ? '전체 담당자' : getPartName(dev)}</option>
+            <option value="ALL">전체 담당자</option>
+            <option value="NONE" className="text-red-400 font-bold">⚠️ 담당자 미지정</option>
+            {developers.filter(d => d !== 'ALL' && d !== 'NONE').map(dev => (
+              <option key={dev} value={dev} className="text-white">{dev}</option>
             ))}
           </select>
 
@@ -203,7 +207,6 @@ const RequestList = ({ filterStatus }) => {
 
           <button
             onClick={() => {
-              // 🌟 5. 초기화 버튼 클릭 시 developer도 ALL로 초기화
               setLocalFilters({status:'ALL', category:'ALL', part:'ALL', developer:'ALL'});
               setDateFilters({startDate: formatDate(lastMonth), endDate: formatDate(today)});
               setSearchTerm('');
@@ -215,7 +218,6 @@ const RequestList = ({ filterStatus }) => {
         </div>
       </div>
 
-      {/* 2. 요청 목록 카드 영역 */}
       {loading ? (
         <div className="text-center py-20 text-gray-400">데이터를 불러오는 중입니다...</div>
       ) : (
@@ -224,15 +226,20 @@ const RequestList = ({ filterStatus }) => {
             <div
               key={idx}
               onClick={() => setSelectedRequest(req)}
-              className="bg-[#1A1C23] rounded-xl border border-[#2D2F39] p-6 shadow-lg cursor-pointer hover:border-[#5E5CE6] transition-all duration-200 flex flex-col gap-4 group"
+              className="bg-[#1A1C23] rounded-xl border border-[#2D2F39] p-6 shadow-lg cursor-pointer hover:border-[#5E5CE6] transition-all duration-200 flex flex-col gap-4 group relative"
             >
-              {/* 상단: 요청번호 & 상태배지 */}
+              {/* 미지정 항목 알림 아이콘 */}
+              {(!req.PART || !req.DEVELOPER2) && (
+                <div className="absolute top-2 right-2 text-red-500 animate-pulse">
+                  <AlertTriangle size={16} />
+                </div>
+              )}
+
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm font-medium text-gray-500">{req.NO}</span>
                 {getStatusBadge(req.WORK_YN)}
               </div>
 
-              {/* 중단: 제목 & 내용 */}
               <div>
                 <h3 className="text-lg font-bold text-white mb-2 line-clamp-1 group-hover:text-blue-50">
                   {req.WGUBUN_NM || '제목 없음'}
@@ -242,24 +249,40 @@ const RequestList = ({ filterStatus }) => {
                 </p>
               </div>
 
-              {/* 하단: 2단 배치 영역 (카테고리/파트/요청일자 vs 요청자) */}
-              <div className="flex justify-between items-end mt-auto pt-4 border-t border-[#2D2F39]">
+              {(req.RESPONSE || req.CATCH_UP) && (
+                <div className="bg-[#0E1117] rounded-lg p-3 text-sm text-gray-300 line-clamp-2 border border-[#2D2F39]">
+                  <span className="text-emerald-400 font-bold mr-2">처리:</span>
+                  {req.RESPONSE || req.CATCH_UP}
+                </div>
+              )}
 
-                {/* 좌측: 카테고리 | 지정파트 & 요청일자 */}
+              <div className="flex justify-between items-end mt-auto pt-4 border-t border-[#2D2F39]">
                 <div className="space-y-1">
                   <div className="text-sm text-gray-400 flex items-center gap-2">
                     <span className="text-blue-400 font-medium">{req.WGUBUN_CDNM || '미지정'}</span>
                     <span className="text-gray-600">|</span>
-                    <span>{getPartName(req.PART)}</span>
+
+                    {/* 🌟 파트 미지정 시 강조 표시 */}
+                    {getPartName(req.PART) ? (
+                      <span>{getPartName(req.PART)}</span>
+                    ) : (
+                      <span className="text-red-400 font-bold bg-red-400/10 px-1 rounded">파트 지정 필요</span>
+                    )}
+
                     <span className="text-gray-600">|</span>
-                    <span>{getPartName(req.DEVELOPER2)}</span>
+
+                    {/* 🌟 담당자 미지정 시 강조 표시 */}
+                    {req.DEVELOPER2 && req.DEVELOPER2 !== '' ? (
+                      <span>{req.DEVELOPER2}</span>
+                    ) : (
+                      <span className="text-red-400 font-bold bg-red-400/10 px-1 rounded">담당자 지정 필요</span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-500 font-medium tracking-wide">
                     {req.REQUEST_DE}
                   </div>
                 </div>
 
-                {/* 우측: 요청자 */}
                 <div className="space-y-1 text-right">
                   <div className="text-sm text-gray-400 flex items-center justify-end gap-1.5">
                     <User size={14} className="text-gray-500"/> {req.REQUESTER2 || '알수없음'}
@@ -275,11 +298,14 @@ const RequestList = ({ filterStatus }) => {
         </div>
       )}
 
-      {/* 모달 */}
       {selectedRequest && (
         <RequestModal
           request={selectedRequest}
-          onClose={() => setSelectedRequest(null)}
+          developerList={developerList} // 🌟 개발자 목록 전달
+          onClose={() => {
+            setSelectedRequest(null);
+            fetchRequests();
+          }}
           getStatusBadge={getStatusBadge}
           getPartName={getPartName}
         />
